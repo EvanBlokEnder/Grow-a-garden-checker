@@ -1,0 +1,17 @@
+{
+  "name": "growagarden-stock-checker",
+  "version": "1.0.0",
+  "description": "Stock checker for growagarden.gg with email notifications and webpage",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@sendgrid/mail": "^8.1.4",
+    "express": "^4.21.1",
+    "node-schedule": "^2.1.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
