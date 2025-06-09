@@ -4,17 +4,44 @@ const schedule = require('node-schedule');
 const sgMail = require('@sendgrid/mail');
 const fs = require('fs').promises;
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 
-// Serve static files from the public directory
+
 app.use(express.static(path.join(__dirname, 'public')));
 
-// SendGrid API Key (set in environment variables)
-sgMail.setApiKey(process.env.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);
+
+const ENCRYPTED_API_KEY = 'f6d8a2b1c3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1';
+const IV = Buffer.from('a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6', 'hex');
+
+
+function decryptApiKey() {
+  try {
+    const secret = process.env.ENCRYPTION_SECRET;
+    if (!secret || secret.length !== 32) {
+      throw new Error('Invalid or missing ENCRYPTION_SECRET');
+    }
+    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(secret), IV);
+    let decrypted = decipher.update(ENCRYPTED_API_KEY, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (error) {
+    console.error('Decryption error:', error.message);
+    return null;
+  }
+}
+
+// Set SendGrid API key
+const apiKey = decryptApiKey();
+if (apiKey) {
+  sgMail.setApiKey(apiKey);
+} else {
+  console.error('Failed to initialize SendGrid due to decryption error');
+}
 
 // Your email address (set in environment variables)
-const YOUR_EMAIL = process.env.YOUR_EMAIL || 'littlesharkvr@gmail.com';
+const YOUR_EMAIL = process.env.YOUR_EMAIL || 'rizzingbob@gmail.com';
 
 // Path to store stock data
 const STOCK_FILE = path.join(__dirname, 'stockData.json');
@@ -121,6 +148,10 @@ async function saveStockData(data) {
 
 // Function to send email
 async function sendEmail(subject, changes) {
+  if (!apiKey) {
+    console.error('Cannot send email: API key decryption failed');
+    return false;
+  }
   const msg = {
     to: YOUR_EMAIL,
     from: YOUR_EMAIL, // Use verified sender email
