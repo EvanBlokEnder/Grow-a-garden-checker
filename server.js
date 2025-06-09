@@ -88,6 +88,7 @@ function fetchStockData() {
 
         try {
           const stockDataSSR = JSON.parse(jsonString);
+          console.log('Raw stockDataSSR:', stockDataSSR); // Log for debugging
           resolve(stockDataSSR);
         } catch (e) {
           reject(new Error('Failed to parse extracted JSON: ' + e.message));
@@ -138,17 +139,40 @@ async function sendEmail(subject, changes) {
   }
 }
 
+// Function to normalize stock data to an array
+function normalizeStockData(stockData) {
+  // Handle different possible structures
+  if (Array.isArray(stockData)) {
+    return stockData;
+  } else if (stockData && typeof stockData === 'object') {
+    // Check for common nested array properties
+    if (Array.isArray(stockData.data)) return stockData.data;
+    if (Array.isArray(stockData.items)) return stockData.items;
+    if (Array.isArray(stockData.products)) return stockData.products;
+    // Convert object values to array if no known array property
+    return Object.values(stockData).filter(item => typeof item === 'object' && item.id && item.name);
+  }
+  return [];
+}
+
 // Function to compare stock and detect changes
 async function checkStockChanges() {
   try {
-    const currentStock = await fetchStockData();
-    const previousStock = await loadPreviousStock();
+    const rawStock = await fetchStockData();
+    const currentStock = normalizeStockData(rawStock);
+    const previousStock = normalizeStockData(await loadPreviousStock());
+
+    console.log('Normalized currentStock:', currentStock); // Log for debugging
+    console.log('Normalized previousStock:', previousStock); // Log for debugging
 
     const changes = [];
 
-    // Assuming stockDataSSR is an array of items with id, name, and inStock
-    if (!previousStock) {
-      // First run, notify about all in-stock items
+    if (!Array.isArray(currentStock)) {
+      throw new Error('Normalized currentStock is not an array');
+    }
+
+    // First run or no previous stock
+    if (!previousStock || !previousStock.length) {
       currentStock.forEach((item) => {
         if (item.inStock) {
           changes.push(`${item.name} is in stock (New Item)`);
@@ -173,7 +197,7 @@ async function checkStockChanges() {
     }
 
     // Save current stock for next comparison
-    await saveStockData(currentStock);
+    await saveStockData(rawStock);
     return { success: true, changes };
   } catch (error) {
     console.error('Error checking stock:', error);
@@ -185,11 +209,21 @@ async function checkStockChanges() {
 // Function to get current stock and email it
 async function getCurrentStock() {
   try {
-    const currentStock = await fetchStockData();
-    const stockList = currentStock.map((item) => 
-      `${item.name}: ${item.inStock ? 'In Stock' : 'Out of Stock'}`
-    );
-    await sendEmail('Current GrowAGarden Stock', stockList.length > 0 ? stockList : ['No stock data available']);
+    const rawStock = await fetchStockData();
+    const currentStock = normalizeStockData(rawStock);
+    console.log('Normalized currentStock for getCurrentStock:', currentStock); // Log for debugging
+
+    if (!Array.isArray(currentStock)) {
+      throw new Error('Normalized currentStock is not an array');
+    }
+
+    const stockList = currentStock.length > 0
+      ? currentStock.map((item) => 
+          `${item.name}: ${item.inStock ? 'In Stock' : 'Out of Stock'}`
+        )
+      : ['No stock data available'];
+
+    await sendEmail('Current GrowAGarden Stock', stockList);
     return { success: true, stock: stockList };
   } catch (error) {
     console.error('Error fetching current stock:', error);
