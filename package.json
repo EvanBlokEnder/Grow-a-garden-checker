@@ -1,13 +1,13 @@
 {
   "name": "growagarden-stock-checker",
   "version": "1.0.0",
-  "description": "Stock checker for growagarden.gg with email notifications and webpage",
+  "description": "Stock checker for growagarden.gg with Discord bot notifications",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "@sendgrid/mail": "^8.1.4",
+    "discord.js": "^14.16.3",
     "express": "^4.21.1",
     "node-schedule": "^2.1.1"
   },
