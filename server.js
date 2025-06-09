@@ -1,21 +1,21 @@
 const https = require('https');
 const express = require('express');
 const schedule = require('node-schedule');
-const sgMail = require('@sendgrid/mail');
+const { Client, GatewayIntentBits } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 
 const app = express();
 
-
+// Serve static files from the public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-
+// Hardcoded encrypted API key and IV (unused but retained for consistency)
 const ENCRYPTED_API_KEY = 'f6d8a2b1c3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1';
 const IV = Buffer.from('a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6', 'hex');
 
-
+// Decrypt API key (unused but retained)
 function decryptApiKey() {
   try {
     const secret = process.env.ENCRYPTION_SECRET;
@@ -32,16 +32,44 @@ function decryptApiKey() {
   }
 }
 
-// Set SendGrid API key
-const apiKey = decryptApiKey();
-if (apiKey) {
-  sgMail.setApiKey(apiKey);
-} else {
-  console.error('Failed to initialize SendGrid due to decryption error');
-}
+// Initialize Discord bot
+const discordClient = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
+});
 
-// Your email address (set in environment variables)
-const YOUR_EMAIL = process.env.YOUR_EMAIL || 'rizzingbob@gmail.com';
+// Discord bot setup
+const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
+const DISCORD_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID;
+const DISCORD_USER_ID = process.env.DISCORD_USER_ID || 'EvanBlokEnder';
+
+discordClient.once('ready', () => {
+  console.log(`Logged in as ${discordClient.user.tag}`);
+});
+
+discordClient.on('messageCreate', async (message) => {
+  if (message.author.bot || message.channel.id !== DISCORD_CHANNEL_ID) return;
+  if (message.content.toLowerCase() === '!getstock') {
+    const result = await getCurrentStock();
+    if (result.success) {
+      message.channel.send(`<@${DISCORD_USER_ID}>\nCurrent stock:\n${result.stock.join('\n')}`);
+    } else {
+      message.channel.send(`<@${DISCORD_USER_ID}>\nError: ${result.error}`);
+    }
+  }
+});
+
+// Login to Discord
+if (DISCORD_TOKEN) {
+  discordClient.login(DISCORD_TOKEN).catch((error) => {
+    console.error('Failed to login to Discord:', error);
+  });
+} else {
+  console.error('DISCORD_TOKEN is not set');
+}
 
 // Path to store stock data
 const STOCK_FILE = path.join(__dirname, 'stockData.json');
@@ -146,26 +174,19 @@ async function saveStockData(data) {
   await fs.writeFile(STOCK_FILE, JSON.stringify(data, null, 2));
 }
 
-// Function to send email
-async function sendEmail(subject, changes) {
-  if (!apiKey) {
-    console.error('Cannot send email: API key decryption failed');
+// Function to send Discord message
+async function sendDiscordMessage(content) {
+  if (!DISCORD_TOKEN || !DISCORD_CHANNEL_ID) {
+    console.error('Missing DISCORD_TOKEN or DISCORD_CHANNEL_ID');
     return false;
   }
-  const msg = {
-    to: YOUR_EMAIL,
-    from: YOUR_EMAIL, // Use verified sender email
-    subject: subject,
-    text: `Stock update:\n\n${changes.join('\n')}`,
-    html: `<p>Stock update:</p><ul>${changes.map((change) => `<li>${change}</li>`).join('')}</ul>`,
-  };
-
   try {
-    await sgMail.send(msg);
-    console.log('Email sent successfully');
+    const channel = await discordClient.channels.fetch(DISCORD_CHANNEL_ID);
+    await channel.send(`<@${DISCORD_USER_ID}>\n${content}`);
+    console.log('Discord message sent successfully');
     return true;
   } catch (error) {
-    console.error('Error sending email:', error);
+    console.error('Error sending Discord message:', error);
     return false;
   }
 }
@@ -215,16 +236,16 @@ async function checkStockChanges() {
         const previousItem = previousStock.find((p) => p.id === currentItem.id);
         if (!previousItem) {
           // New item added
-          changes.push(`${currentItem.name} was added to stock`);
+          changes.push(`${item.name} was added to stock`);
         } else if (!previousItem.inStock && currentItem.inStock) {
           // Item restocked
-          changes.push(`${currentItem.name} is back in stock`);
+          changes.push(`${item.name} is back in stock`);
         }
       });
     }
 
     if (changes.length > 0) {
-      await sendEmail('GrowAGarden Stock Update', changes);
+      await sendDiscordMessage(`Stock update:\n${changes.join('\n')}`);
     }
 
     // Save current stock for next comparison
@@ -232,12 +253,12 @@ async function checkStockChanges() {
     return { success: true, changes };
   } catch (error) {
     console.error('Error checking stock:', error);
-    await sendEmail('Stock Check Error', [`Error checking stock: ${error.message}`]);
+    await sendDiscordMessage(`Stock check error: ${error.message}`);
     return { success: false, error: error.message };
   }
 }
 
-// Function to get current stock and email it
+// Function to get current stock and send to Discord
 async function getCurrentStock() {
   try {
     const rawStock = await fetchStockData();
@@ -254,11 +275,11 @@ async function getCurrentStock() {
         )
       : ['No stock data available'];
 
-    await sendEmail('Current GrowAGarden Stock', stockList);
+    await sendDiscordMessage(`Current stock:\n${stockList.join('\n')}`);
     return { success: true, stock: stockList };
   } catch (error) {
     console.error('Error fetching current stock:', error);
-    await sendEmail('Current Stock Error', [`Error fetching stock: ${error.message}`]);
+    await sendDiscordMessage(`Error fetching stock: ${error.message}`);
     return { success: false, error: error.message };
   }
 }
