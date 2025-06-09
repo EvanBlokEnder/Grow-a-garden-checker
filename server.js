@@ -11,10 +11,10 @@ const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
 
 // SendGrid API Key (set in environment variables)
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+sgMail.setApiKey(process.env.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);
 
 // Your email address (set in environment variables)
-const YOUR_EMAIL = process.env.YOUR_EMAIL || 'your-email@example.com';
+const YOUR_EMAIL = process.env.YOUR_EMAIL || 'littlesharkvr@gmail.com';
 
 // Path to store stock data
 const STOCK_FILE = path.join(__dirname, 'stockData.json');
